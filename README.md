@@ -2,8 +2,6 @@
 
 A lightweight ESP8266 watchdog that monitors a [Solar WiFi Weather Station](https://github.com/3KUdelta/Solar_WiFi_Weather_Station) via MQTT and displays live data on a small OLED screen.
 
-![Watchdog concept](concept.png)
-
 ## What it does
 
 The watchdog subscribes to the weather station's MQTT topic and tracks incoming messages. A 0.96" OLED shows live weather data, battery status, and a "last seen" timer. If the station goes silent or reports suspicious values, the onboard LED starts blinking and the display shows a warning.
