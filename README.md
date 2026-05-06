@@ -25,9 +25,9 @@ Normal mode — temperature and humidity large, readable from across the room:
 ┌──────────────────────┐
 │ 18.4°C         67%   │  ← large font (size 2)
 │──────────────────────│  ← separator line
-│ 1018 hPa  [↗]  3.9V │  ← pressure + trend arrow + battery
+│ 1018 hPa  [↗]  3.9V  │  ← pressure + trend arrow + battery
 │ Dew:12.3° Sp:6.1     │  ← dewpoint + spread
-│ Last: 3m ago          │  ← time since last message
+│ Last: 3m ago         │  ← time since last message
 └──────────────────────┘
 ```
 
@@ -36,12 +36,12 @@ Trend arrows: ↗↗ rising fast, ↗ rising, → steady, ↘ falling, ↘↘ fa
 Alarm mode — full-screen warning with icon, visible from far away:
 ```
 ┌──────────────────────┐
-│          /\           │
-│         /!!\          │  ← large warning triangle
-│        /____\         │
-│                       │
-│     OFFLINE!          │  ← large font (size 2)
-│     last: 28m ago     │
+│          /\          │
+│         /!!\         │  ← large warning triangle
+│        /____\        │
+│                      │
+│     OFFLINE!         │  ← large font (size 2)
+│     last: 28m ago    │
 └──────────────────────┘
 ```
 
