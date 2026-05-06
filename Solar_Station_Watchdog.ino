@@ -72,9 +72,7 @@ float   wx_batt       = 0;
 int     wx_batt_pct   = 0;
 int     wx_pressure   = 0;
 float   wx_dewpoint   = 0;
-String  wx_zambretti  = "---";
-String  wx_trend      = "---";
-int     wx_rssi       = 0;
+float   wx_trend_val  = 0;        // numeric trend value for arrow direction
 
 // Alarm tracking
 bool    alarm_offline    = false;
@@ -219,12 +217,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   wx_batt_pct   = doc["batterypercentage"]| wx_batt_pct;
   wx_pressure   = doc["relativepressure"] | wx_pressure;
   wx_dewpoint   = doc["dewpoint"]         | wx_dewpoint;
-  wx_rssi       = doc["wifi_strength"]    | wx_rssi;
-
-  if (doc["zambrettisays"].is<const char*>())
-    wx_zambretti = doc["zambrettisays"].as<const char*>();
-  if (doc["trendinwords"].is<const char*>())
-    wx_trend = doc["trendinwords"].as<const char*>();
+  wx_trend_val  = doc["trend"]            | wx_trend_val;
   if (doc["timestamp"].is<unsigned long>())
     last_station_epoch = doc["timestamp"];
 
@@ -290,90 +283,220 @@ void blinkLED() {
 // =====================================================================
 // OLED display update
 // =====================================================================
+// ----- Custom icons drawn with drawLine/fillTriangle -----
+
+// Draw a trend arrow at position (x, y), size ~12x12 px
+// direction: 1=up, 0=steady, -1=down
+// fast: true = double arrow (fast rise/fall)
+void drawTrendArrow(int x, int y, int direction, bool fast) {
+  if (direction == 1) {
+    // Arrow pointing up-right (↗)
+    display.drawLine(x, y + 11, x + 11, y, SSD1306_WHITE);       // shaft
+    display.fillTriangle(x + 5, y, x + 11, y, x + 11, y + 6, SSD1306_WHITE); // head
+    if (fast) {  // second arrow behind
+      display.drawLine(x, y + 14, x + 8, y + 6, SSD1306_WHITE);
+    }
+  } else if (direction == -1) {
+    // Arrow pointing down-right (↘)
+    display.drawLine(x, y, x + 11, y + 11, SSD1306_WHITE);       // shaft
+    display.fillTriangle(x + 5, y + 11, x + 11, y + 5, x + 11, y + 11, SSD1306_WHITE);
+    if (fast) {
+      display.drawLine(x, y - 3, x + 8, y + 5, SSD1306_WHITE);
+    }
+  } else {
+    // Steady: horizontal arrow (→)
+    display.drawLine(x, y + 6, x + 11, y + 6, SSD1306_WHITE);   // shaft
+    display.fillTriangle(x + 8, y + 3, x + 11, y + 6, x + 8, y + 9, SSD1306_WHITE);
+  }
+}
+
+// Draw a warning triangle icon at (x, y), size w x h
+void drawWarningIcon(int x, int y, int w, int h) {
+  // Outer triangle
+  display.drawTriangle(x + w / 2, y, x, y + h - 1, x + w - 1, y + h - 1, SSD1306_WHITE);
+  display.drawTriangle(x + w / 2, y + 1, x + 1, y + h - 1, x + w - 2, y + h - 1, SSD1306_WHITE);
+  // Exclamation mark inside
+  int cx = x + w / 2;
+  int ey = y + h / 3;
+  display.drawLine(cx, ey, cx, ey + h / 4, SSD1306_WHITE);      // stem
+  display.drawPixel(cx, y + h - h / 4, SSD1306_WHITE);           // dot
+}
+
+// Get trend direction and speed from numeric trend value
+void getTrendInfo(float val, int &direction, bool &fast) {
+  if      (val >  1.5) { direction =  1; fast = true;  }   // rising fast
+  else if (val >  0.25){ direction =  1; fast = false; }   // rising / rising slow
+  else if (val < -1.5) { direction = -1; fast = true;  }   // falling fast
+  else if (val < -0.25){ direction = -1; fast = false; }   // falling / falling slow
+  else                 { direction =  0; fast = false; }   // steady
+}
+
 void updateDisplay() {
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
 
   if (!ever_received) {
-    // Waiting screen
-    display.setCursor(0, 0);
+    // ----- Waiting screen -----
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(10, 12);
     display.println("Waiting for");
+    display.setCursor(10, 24);
     display.println("station data...");
-    unsigned long wait = (millis() / 1000);
-    display.print("(");
+    unsigned long wait = millis() / 1000;
+    display.setCursor(10, 40);
     display.print(wait);
-    display.println("s)");
+    display.print("s");
     display.display();
     return;
   }
 
-  // ----- Line 0: Status bar -----
-  display.setCursor(0, 0);
+  unsigned long age_sec = (millis() - last_msg_time) / 1000;
+
+  // =============================================
+  // ALARM SCREENS (full-screen, visible from far)
+  // =============================================
   if (alarm_offline) {
-    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);   // inverted = alarm
-    display.print(" !! STATION OFFLINE !! ");
+    // Large warning triangle centered
+    drawWarningIcon(48, 2, 32, 28);
+
+    display.setTextSize(2);
     display.setTextColor(SSD1306_WHITE);
-  } else {
-    // Time since last message
-    unsigned long age_sec = (millis() - last_msg_time) / 1000;
-    display.print("Last: ");
+    display.setCursor(10, 34);
+    display.print("OFFLINE!");
+
+    display.setTextSize(1);
+    display.setCursor(20, 54);
+    display.print("last: ");
     display.print(timeAgo(age_sec));
-    display.print("  ");
-    // WiFi strength of station
-    display.print(wx_rssi);
-    display.println("dB");
+
+    display.display();
+    return;
   }
 
-  // ----- Line 1: Temperature + Humidity -----
-  display.setCursor(0, 14);
-  if (alarm_temp_err) {
-    display.print("T: ERR!");
-  } else {
-    display.print("T:");
-    display.print(wx_temp, 1);
-    display.print("\xF8""C");                    // ° symbol
-  }
-  display.print("  H:");
-  if (alarm_humi_stuck) {
-    display.println("STUCK!");
-  } else {
-    display.print(wx_humi, 0);
-    display.println("%");
-  }
-
-  // ----- Line 2: Pressure + Trend -----
-  display.setCursor(0, 26);
-  display.print(wx_pressure);
-  display.print("hPa ");
-  // Truncate trend to fit screen
-  String trend_short = wx_trend;
-  if (trend_short.length() > 12) trend_short = trend_short.substring(0, 12);
-  display.println(trend_short);
-
-  // ----- Line 3: Battery -----
-  display.setCursor(0, 38);
-  display.print("Batt: ");
-  display.print(wx_batt, 2);
-  display.print("V ");
-  display.print(wx_batt_pct);
-  display.print("% ");
   if (alarm_batt_crit) {
-    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
-    display.print("CRIT");
+    drawWarningIcon(48, 2, 32, 28);
+
+    display.setTextSize(2);
     display.setTextColor(SSD1306_WHITE);
-  } else if (alarm_batt_warn) {
-    display.print("LOW");
-  } else {
-    display.print("OK");
+    display.setCursor(4, 34);
+    display.print("BATT CRIT");
+
+    display.setTextSize(1);
+    display.setCursor(30, 54);
+    display.print(wx_batt, 2);
+    display.print("V  ");
+    display.print(wx_batt_pct);
+    display.print("%");
+
+    display.display();
+    return;
   }
 
-  // ----- Line 4: Zambretti forecast -----
-  display.setCursor(0, 50);
-  // Truncate to fit 128px width (~21 chars at size 1)
-  String forecast = wx_zambretti;
-  if (forecast.length() > 21) forecast = forecast.substring(0, 21);
-  display.print(forecast);
+  if (alarm_temp_err) {
+    drawWarningIcon(48, 2, 32, 28);
+
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(4, 34);
+    display.print("TEMP ERR!");
+
+    display.setTextSize(1);
+    display.setCursor(16, 54);
+    display.print("DS18B20 bus fault");
+
+    display.display();
+    return;
+  }
+
+  if (alarm_humi_stuck) {
+    drawWarningIcon(48, 2, 32, 28);
+
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(4, 34);
+    display.print("HUMI 100%");
+
+    display.setTextSize(1);
+    display.setCursor(10, 54);
+    display.print("sensor stuck (");
+    display.print(humi_stuck_count);
+    display.print("x)");
+
+    display.display();
+    return;
+  }
+
+  // =============================================
+  // NORMAL DISPLAY (data dashboard)
+  // =============================================
+
+  // ----- Row 1: Temperature + Humidity (large, eye-catching) -----
+  //
+  // Layout:  18.4°C        67%
+  //          ^^^^           ^^^
+  //          size 2         size 2
+  //
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  if (wx_temp >= 0 && wx_temp < 10) display.print(" ");     // right-align single digit
+  display.print(wx_temp, 1);
+  display.setTextSize(1);
+  display.setCursor(display.getCursorX(), 0);
+  display.print("\xF8""C");                                   // °C in small font
+
+  display.setTextSize(2);
+  display.setCursor(84, 0);
+  if (wx_humi < 10) display.print("  ");
+  else if (wx_humi < 100) display.print(" ");
+  display.print(wx_humi, 0);
+  display.setTextSize(1);
+  display.setCursor(display.getCursorX(), 0);
+  display.print("%");
+
+  // ----- Separator line -----
+  display.drawLine(0, 19, 127, 19, SSD1306_WHITE);
+
+  // ----- Row 2: Pressure + Trend arrow + Battery -----
+  //
+  // Layout:  1018 hPa  [↗]  3.9V
+  //
+  display.setTextSize(1);
+  display.setCursor(0, 24);
+  display.print(wx_pressure);
+  display.print(" hPa");
+
+  // Trend arrow (drawn between pressure and battery)
+  int trend_dir;
+  bool trend_fast;
+  getTrendInfo(wx_trend_val, trend_dir, trend_fast);
+  drawTrendArrow(62, 22, trend_dir, trend_fast);
+
+  // Battery voltage (right-aligned)
+  display.setCursor(90, 24);
+  display.print(wx_batt, 1);
+  display.print("V");
+  if (alarm_batt_warn) {
+    display.print("!");
+  }
+
+  // ----- Row 3: Dewpoint spread + Last seen (status bar) -----
+  //
+  // Layout:  Dew:12.3°C  Sp:6.1   3m ago
+  //
+  display.setCursor(0, 38);
+  display.print("Dew:");
+  display.print(wx_dewpoint, 1);
+  display.print("\xF8");
+
+  float spread = wx_temp - wx_dewpoint;
+  display.setCursor(60, 38);
+  display.print("Sp:");
+  display.print(spread, 1);
+
+  display.setCursor(0, 52);
+  display.print("Last: ");
+  display.print(timeAgo(age_sec));
 
   display.display();
 }
