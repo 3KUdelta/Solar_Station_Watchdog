@@ -20,22 +20,32 @@ The humidity-stuck detection catches exactly the kind of sensor failure that pro
 
 ### OLED display layout
 
+Normal mode — temperature and humidity large, readable from across the room:
 ```
 ┌──────────────────────┐
-│ Last: 3m ago   -67dB │   ← time since last message + station WiFi RSSI
-│ T:18.4°C  H:67%      │   ← temperature + humidity
-│ 1018hPa steigend     │   ← pressure + trend
-│ Batt: 3.92V 74% OK   │   ← battery voltage + percentage + status
-│ Schönes Wetter       │   ← Zambretti forecast
+│ 18.4°C         67%   │  ← large font (size 2)
+│──────────────────────│  ← separator line
+│ 1018 hPa  [↗]  3.9V │  ← pressure + trend arrow + battery
+│ Dew:12.3° Sp:6.1     │  ← dewpoint + spread
+│ Last: 3m ago          │  ← time since last message
 └──────────────────────┘
 ```
 
-When a station goes offline, the top line inverts to:
+Trend arrows: ↗↗ rising fast, ↗ rising, → steady, ↘ falling, ↘↘ falling fast.
+
+Alarm mode — full-screen warning with icon, visible from far away:
 ```
 ┌──────────────────────┐
-│ !! STATION OFFLINE !!│
-│ ...                  │
+│          /\           │
+│         /!!\          │  ← large warning triangle
+│        /____\         │
+│                       │
+│     OFFLINE!          │  ← large font (size 2)
+│     last: 28m ago     │
+└──────────────────────┘
 ```
+
+Each alarm type (OFFLINE, BATT CRIT, TEMP ERR, HUMI 100%) gets its own full-screen with context info.
 
 
 ## Hardware
@@ -70,6 +80,62 @@ Wemos D1 Mini          SSD1306 OLED
    - `Time` (by Michael Margolis)
 
 2. Edit `Watchdog_Settings.h`:
+   - Set your WiFi credentials (`ssid`, `pass`)
+   - Set your MQTT broker and topic (must match the weather station's settings)
+   - Adjust alarm thresholds if needed
+
+3. Flash the sketch to your Wemos D1 Mini
+
+4. Power via USB — the watchdog runs continuously
+
+
+## Configuration
+
+All settings are in `Watchdog_Settings.h`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ALARM_TIMEOUT_SEC` | 1500 (25 min) | Seconds without MQTT message before OFFLINE alarm |
+| `BATT_WARN_VOLTAGE` | 3.5 | Battery warning threshold (V) |
+| `BATT_CRIT_VOLTAGE` | 3.4 | Battery critical threshold (V) |
+| `HUMI_STUCK_THRESHOLD` | 99.5 | Humidity (%) above which stuck-detection counts |
+| `HUMI_STUCK_CYCLES` | 3 | Consecutive readings at 100% before alarm |
+| `TEMP_ERROR_VALUE` | -88 | DS18B20 returns this on bus error |
+
+### Why 25 minutes?
+
+The weather station wakes every 10 minutes. A single missed cycle can happen (slow WiFi, NTP retry). Two missed cycles (20 min) with some margin = 25 minutes means something is genuinely wrong: dead battery, hardware failure, or network issue.
+
+
+## Compatibility
+
+This watchdog works with the Solar WiFi Weather Station V2.4 and later. It parses the standard JSON message format:
+
+```json
+{
+  "temperature": 18.4,
+  "humidity": 67.2,
+  "battery": 3.92,
+  "batterypercentage": 74,
+  "relativepressure": 1018,
+  "dewpoint": 12.3,
+  "zambrettisays": "Schönes Wetter",
+  "trendinwords": "steigend",
+  "wifi_strength": -67,
+  "timestamp": 1745923200
+}
+```
+
+Any additional fields in the message are silently ignored — forward-compatible.
+
+
+## License
+
+Same license as the Solar WiFi Weather Station project.
+
+---
+
+*HiFiLabor.ch — Marc Stähli, 2026*
    - Set your WiFi credentials (`ssid`, `pass`)
    - Set your MQTT broker and topic (must match the weather station's settings)
    - Adjust alarm thresholds if needed
