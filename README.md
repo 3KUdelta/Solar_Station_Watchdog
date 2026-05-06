@@ -131,62 +131,6 @@ Any additional fields in the message are silently ignored — forward-compatible
 
 ## License
 
-Same license as the Solar WiFi Weather Station project.
-
----
-
-*HiFiLabor.ch — Marc Stähli, 2026*
-   - Set your WiFi credentials (`ssid`, `pass`)
-   - Set your MQTT broker and topic (must match the weather station's settings)
-   - Adjust alarm thresholds if needed
-
-3. Flash the sketch to your Wemos D1 Mini
-
-4. Power via USB — the watchdog runs continuously
-
-
-## Configuration
-
-All settings are in `Watchdog_Settings.h`:
-
-| Setting | Default | Description |
-|---|---|---|
-| `ALARM_TIMEOUT_SEC` | 1500 (25 min) | Seconds without MQTT message before OFFLINE alarm |
-| `BATT_WARN_VOLTAGE` | 3.5 | Battery warning threshold (V) |
-| `BATT_CRIT_VOLTAGE` | 3.4 | Battery critical threshold (V) |
-| `HUMI_STUCK_THRESHOLD` | 99.5 | Humidity (%) above which stuck-detection counts |
-| `HUMI_STUCK_CYCLES` | 3 | Consecutive readings at 100% before alarm |
-| `TEMP_ERROR_VALUE` | -88 | DS18B20 returns this on bus error |
-
-### Why 25 minutes?
-
-The weather station wakes every 10 minutes. A single missed cycle can happen (slow WiFi, NTP retry). Two missed cycles (20 min) with some margin = 25 minutes means something is genuinely wrong: dead battery, hardware failure, or network issue.
-
-
-## Compatibility
-
-This watchdog works with the Solar WiFi Weather Station V2.4 and later. It parses the standard JSON message format:
-
-```json
-{
-  "temperature": 18.4,
-  "humidity": 67.2,
-  "battery": 3.92,
-  "batterypercentage": 74,
-  "relativepressure": 1018,
-  "dewpoint": 12.3,
-  "zambrettisays": "Schönes Wetter",
-  "trendinwords": "steigend",
-  "wifi_strength": -67,
-  "timestamp": 1745923200
-}
-```
-
-Any additional fields in the message are silently ignored — forward-compatible.
-
-
-## License
-
 MIT License
 
 Copyright (c) 2026 Marc Staehli
